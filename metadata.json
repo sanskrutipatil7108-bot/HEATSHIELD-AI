@@ -1,0 +1,8 @@
+{
+  "name": "Remix Remix HeatShield AI",
+  "description": "Global-ready traffic junction heat risk assessment, smart duty rotation planner, and cooling facility prioritization platform.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

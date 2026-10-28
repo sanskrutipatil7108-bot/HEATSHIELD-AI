@@ -1,0 +1,217 @@
+@import "tailwindcss";
+
+:root, [data-theme="light"] {
+  --app-bg: #F1F5F9;
+  --card-bg: #FFFFFF;
+  --card-subtle: #F8FAFC;
+  --hover-bg: #E8F2FF;
+  --filter-inactive: #E8F2FF;
+  --header-bg: #14213D;
+  --header-substrip: #0F172A;
+  --header-text: #FFFFFF;
+  --header-muted: #94A3B8;
+  --text-main: #0F172A;
+  --text-secondary: #334155;
+  --text-muted: #64748B;
+  --border-main: #DCE5EF;
+  --border-subtle: #E8EEF5;
+  --btn-primary: #2563EB;
+  --btn-primary-hover: #1D4ED8;
+  --accent-teal: #14B8A6;
+  --accent-teal-hover: #0D9488;
+  --input-bg: #FFFFFF;
+  --input-border: #DCE5EF;
+  --table-th: #F8FAFC;
+  --table-hover: #E8F2FF;
+  --modal-bg: #FFFFFF;
+  --shadow-card: 0 1px 3px 0 rgb(15 23 42 / 0.06), 0 1px 2px -1px rgb(15 23 42 / 0.04);
+  --shadow-modal: 0 20px 25px -5px rgb(15 23 42 / 0.15), 0 8px 10px -6px rgb(15 23 42 / 0.1);
+  --scrollbar-track: #E2E8F0;
+  --scrollbar-thumb: #94A3B8;
+}
+
+[data-theme="dark"] {
+  --app-bg: #0B1120;
+  --card-bg: #0F172A;
+  --card-subtle: #1E293B;
+  --hover-bg: #1E293B;
+  --filter-inactive: #1E293B;
+  --header-bg: #0F172A;
+  --header-substrip: #090E17;
+  --header-text: #FFFFFF;
+  --header-muted: #94A3B8;
+  --text-main: #F8FAFC;
+  --text-secondary: #CBD5E1;
+  --text-muted: #94A3B8;
+  --border-main: #1E293B;
+  --border-subtle: #334155;
+  --btn-primary: #2563EB;
+  --btn-primary-hover: #1D4ED8;
+  --accent-teal: #14B8A6;
+  --accent-teal-hover: #0D9488;
+  --input-bg: #090E17;
+  --input-border: #334155;
+  --table-th: #090E17;
+  --table-hover: #1E293B;
+  --modal-bg: #0F172A;
+  --shadow-card: 0 4px 6px -1px rgb(0 0 0 / 0.4), 0 2px 4px -2px rgb(0 0 0 / 0.4);
+  --shadow-modal: 0 25px 50px -12px rgb(0 0 0 / 0.7);
+  --scrollbar-track: #0F172A;
+  --scrollbar-thumb: #334155;
+}
+
+[data-theme="nature"] {
+  --app-bg: #F0F6F3;
+  --card-bg: #FFFFFF;
+  --card-subtle: #E8F2EC;
+  --hover-bg: #E2F0E7;
+  --filter-inactive: #E2F0E7;
+  --header-bg: #13392A;
+  --header-substrip: #0D261C;
+  --header-text: #FFFFFF;
+  --header-muted: #A3C9B6;
+  --text-main: #0B291C;
+  --text-secondary: #2C4A3E;
+  --text-muted: #4B6E5F;
+  --border-main: #D1E5DA;
+  --border-subtle: #E2ECE6;
+  --btn-primary: #059669;
+  --btn-primary-hover: #047857;
+  --accent-teal: #0D9488;
+  --accent-teal-hover: #0f766e;
+  --input-bg: #FFFFFF;
+  --input-border: #C1DACD;
+  --table-th: #E6F0EA;
+  --table-hover: #F2F8F5;
+  --modal-bg: #FFFFFF;
+  --shadow-card: 0 1px 3px 0 rgb(13 38 28 / 0.08), 0 1px 2px -1px rgb(13 38 28 / 0.04);
+  --shadow-modal: 0 20px 25px -5px rgb(13 38 28 / 0.15);
+  --scrollbar-track: #D8E7DF;
+  --scrollbar-thumb: #7E9E91;
+}
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  body {
+    max-width: 100%;
+    overflow-x: hidden;
+    font-family: 'Plus Jakarta Sans', 'Noto Sans Devanagari', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background-color: var(--app-bg);
+    color: var(--text-main);
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .font-mono, .tabular-nums {
+    font-family: 'JetBrains Mono', monospace;
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+/* Common Semantic Theme Classes */
+.bg-app { background-color: var(--app-bg); }
+.bg-card-theme { background-color: var(--card-bg); }
+.bg-subtle-theme { background-color: var(--card-subtle); }
+.bg-hover-theme { background-color: var(--hover-bg); }
+.bg-filter-inactive { background-color: var(--filter-inactive); }
+.text-main-theme { color: var(--text-main); }
+.text-secondary-theme { color: var(--text-secondary); }
+.text-muted-theme { color: var(--text-muted); }
+.border-theme { border-color: var(--border-main); }
+.border-subtle-theme { border-color: var(--border-subtle); }
+.shadow-card-theme { box-shadow: var(--shadow-card); }
+.shadow-modal-theme { box-shadow: var(--shadow-modal); }
+
+.btn-primary-theme {
+  background-color: var(--btn-primary);
+  color: #FFFFFF;
+  transition: background-color 0.15s ease;
+}
+.btn-primary-theme:hover {
+  background-color: var(--btn-primary-hover);
+}
+
+.input-theme {
+  background-color: var(--input-bg);
+  border-color: var(--input-border);
+  color: var(--text-main);
+}
+.input-theme:focus {
+  outline: none;
+  border-color: var(--accent-teal);
+  box-shadow: 0 0 0 2px rgba(20, 184, 166, 0.2);
+}
+
+/* Leaflet map styles */
+.leaflet-container {
+  background-color: #F8FAFC !important;
+  font-family: 'Plus Jakarta Sans', sans-serif !important;
+}
+
+.leaflet-tile-pane {
+  filter: none !important;
+}
+
+/* Popups themed */
+.leaflet-popup-content-wrapper {
+  background: var(--card-bg) !important;
+  color: var(--text-main) !important;
+  border: 1px solid var(--border-main) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--shadow-modal) !important;
+}
+
+.leaflet-popup-tip {
+  background: var(--card-bg) !important;
+  border: 1px solid var(--border-main) !important;
+}
+
+.leaflet-bar {
+  border: 1px solid var(--border-main) !important;
+  border-radius: 8px !important;
+  overflow: hidden;
+  box-shadow: var(--shadow-card) !important;
+}
+
+.leaflet-bar a {
+  background-color: var(--card-bg) !important;
+  color: var(--text-main) !important;
+  border-bottom: 1px solid var(--border-main) !important;
+}
+
+.leaflet-bar a:hover {
+  background-color: var(--card-subtle) !important;
+  color: var(--btn-primary) !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--scrollbar-track);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--scrollbar-thumb);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  filter: brightness(0.85);
+}
+
+/* Hide scrollbar utility for smooth horizontal sub-menus without scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
