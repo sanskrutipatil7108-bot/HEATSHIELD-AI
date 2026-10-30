@@ -201,7 +201,22 @@
     "trafficHeat": "वाहतूक उष्णता",
     "source": "स्रोत",
     "simulated": "अंदाजित",
-    "liveNwp": "थेट एनडब्ल्यूपी"
+    "liveNwp": "थेट एनडब्ल्यूपी",
+    "wheelZoomEnable": "नकाशा झूम चालू करा",
+    "wheelZoomDisable": "पृष्ठ स्क्रोल मोड (सुरक्षित)",
+    "wheelZoomActive": "व्हील झूम सक्रिय",
+    "wheelScrollHint": "माउस व्हीलने पृष्ठ सहज स्क्रोल होते. नकाशा झूम करण्यासाठी बटण टॉगल करा किंवा +/- वापरा.",
+    "locationSelectHeading": "निरीक्षण क्षेत्र / शहर / कस्बा / गाव निवडा",
+    "searchPlacesPlaceholder": "शहर, गाव, कस्बा, जिल्हा शोधा...",
+    "allLocations": "सर्व क्षेत्र",
+    "citiesFilter": "शहरे",
+    "townsFilter": "कस्बे",
+    "villagesFilter": "गावे व ग्रामीण ब्लॉक",
+    "changeOrAddLocation": "सर्व ठिकाणे पहा व नवीन जोडा",
+    "currentLocationOverview": "क्षेत्राचे सूक्ष्म-हवामान व थर्मल स्थिती",
+    "junctionsBelowTitle": "या क्षेत्रातील वाहतूक जंक्शन्स व तपासणी नाके",
+    "focusOnMap": "नकाशावर पहा",
+    "backToTop": "वरती जा"
   },
   "calculator": {
     "title": "वैज्ञानिक थर्मल जोखीम व WBGT गणना मॉडेल",

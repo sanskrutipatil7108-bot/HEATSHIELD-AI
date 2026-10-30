@@ -1,11 +1,12 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { DutyPoint, RiskCategory } from '../types';
+import { DutyPoint, RiskCategory, LocationRecord } from '../types';
 import {
   getRiskCategoryName,
   getShadeConditionName,
   getTrafficDensityName,
   getLocationDisplayName,
+  getLocationTypeName,
   getDutyPointDisplayName,
   formatNumberLocale
 } from '../services/translations';
@@ -26,11 +27,18 @@ import {
   X,
   ChevronDown,
   Eye,
-  EyeOff
+  EyeOff,
+  Search,
+  Sliders,
+  Calendar,
+  ArrowUp,
+  MousePointer,
+  Maximize2
 } from 'lucide-react';
 
 interface GlobalHeatMapViewProps {
   onOpenAddPointWithCoords: (lat: number, lon: number) => void;
+  onOpenLocationModal?: () => void;
   onNavigateToTab: (tab: string) => void;
 }
 
@@ -38,6 +46,7 @@ type TileProvider = 'streets' | 'osm' | 'dark' | 'satellite';
 
 export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
   onOpenAddPointWithCoords,
+  onOpenLocationModal,
   onNavigateToTab
 }) => {
   const {
@@ -56,10 +65,12 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const mapInstanceRef = useRef<L.Map | null>(null);
   const markersLayerRef = useRef<L.LayerGroup | null>(null);
+  const markerLookupRef = useRef<Record<string, L.Marker>>({});
   const tileLayerRef = useRef<L.TileLayer | null>(null);
   const secondaryTileLayerRef = useRef<L.TileLayer | null>(null);
   const isInitialMount = useRef(true);
 
+  // Risk and Filter states
   const [activeRiskFilter, setActiveRiskFilter] = useState<'all' | 'extreme' | 'high' | 'moderate' | 'low'>('all');
   const [selectedPoint, setSelectedPoint] = useState<DutyPoint | null>(null);
   const [clickCoords, setClickCoords] = useState<{ lat: number; lon: number } | null>(null);
@@ -67,6 +78,32 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
   const [isTileLoading, setIsTileLoading] = useState(false);
   const [tileError, setTileError] = useState<string | null>(null);
   const [isInfoCardCollapsed, setIsInfoCardCollapsed] = useState(false);
+
+  // Wheel Zoom and Scroll states (safe scrolling by default)
+  const [isWheelZoomEnabled, setIsWheelZoomEnabled] = useState(false);
+
+  // Location search and category filter state
+  const [locationSearchQuery, setLocationSearchQuery] = useState('');
+  const [locationTypeFilter, setLocationTypeFilter] = useState<'all' | 'city' | 'town' | 'village'>('all');
+
+  // Filter locations based on search and type
+  const filteredLocationList = useMemo(() => {
+    const q = locationSearchQuery.trim().toLowerCase();
+    return locations.filter((loc) => {
+      const matchesSearch =
+        !q ||
+        loc.name.toLowerCase().includes(q) ||
+        loc.country.toLowerCase().includes(q) ||
+        (loc.city && loc.city.toLowerCase().includes(q)) ||
+        (loc.district && loc.district.toLowerCase().includes(q)) ||
+        (loc.state && loc.state.toLowerCase().includes(q));
+
+      if (!matchesSearch) return false;
+      if (locationTypeFilter === 'all') return true;
+      if (locationTypeFilter === 'village') return loc.locationType === 'village' || loc.locationType === 'checkpoint';
+      return loc.locationType === locationTypeFilter;
+    });
+  }, [locations, locationSearchQuery, locationTypeFilter]);
 
   // Synchronize tile layer with selected provider
   const applyTileLayer = useCallback((provider: TileProvider, map: L.Map) => {
@@ -157,7 +194,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
     return layer;
   }, [t]);
 
-  // Initialize Leaflet Map
+  // Initialize Leaflet Map (scrollWheelZoom defaults to isWheelZoomEnabled = false to prevent scroll trapping)
   useEffect(() => {
     const container = mapContainerRef.current;
     if (!container) return;
@@ -177,7 +214,8 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
       center: [selectedLocation.latitude, selectedLocation.longitude],
       zoom: 13,
       zoomControl: true,
-      attributionControl: true
+      attributionControl: true,
+      scrollWheelZoom: isWheelZoomEnabled
     });
 
     mapInstanceRef.current = map;
@@ -215,6 +253,16 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
     };
   }, []);
 
+  // Sync scrollWheelZoom with state
+  useEffect(() => {
+    if (!mapInstanceRef.current) return;
+    if (isWheelZoomEnabled) {
+      mapInstanceRef.current.scrollWheelZoom.enable();
+    } else {
+      mapInstanceRef.current.scrollWheelZoom.disable();
+    }
+  }, [isWheelZoomEnabled]);
+
   // Update tile layer when provider changes
   useEffect(() => {
     if (isInitialMount.current) {
@@ -240,11 +288,12 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
     }
   }, [selectedLocation]);
 
-  // Render Markers
+  // Render Markers and store reference for focus
   useEffect(() => {
     if (!mapInstanceRef.current || !markersLayerRef.current) return;
 
     markersLayerRef.current.clearLayers();
+    markerLookupRef.current = {};
 
     const filtered = dutyPoints.filter((dp) => {
       const assessment = riskAssessments[dp.id];
@@ -362,48 +411,177 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
       });
 
       markersLayerRef.current.addLayer(marker);
+      markerLookupRef.current[dp.id] = marker;
     }
-  }, [dutyPoints, riskAssessments, activeRiskFilter, weatherMap, selectedPoint, language, t]);
+  }, [dutyPoints, riskAssessments, activeRiskFilter, weatherMap, selectedPoint, language, t, currentLocationWeather]);
+
+  // Handle focus on duty point from lower section
+  const handleFocusDutyPoint = (dp: DutyPoint) => {
+    setSelectedPoint(dp);
+    if (mapInstanceRef.current) {
+      mapInstanceRef.current.flyTo([dp.latitude, dp.longitude], 15, { duration: 1.0 });
+      const targetMarker = markerLookupRef.current[dp.id];
+      if (targetMarker) {
+        targetMarker.openPopup();
+      }
+    }
+    mapContainerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  // High & Extreme risk counts
+  const highRiskCount = dutyPoints.filter((dp) => {
+    const cat = riskAssessments[dp.id]?.category;
+    return cat === 'High' || cat === 'Extreme';
+  }).length;
 
   return (
-    <div className="space-y-4">
-      {/* Map Control Bar */}
-      <div className="bg-card-theme border-theme shadow-card-theme rounded-xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        {/* Left: Region Switchers */}
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-semibold text-secondary-theme mr-1 flex items-center gap-1">
-            <Globe className="w-3.5 h-3.5 text-[#2563EB]" />
-            <span>{t('dashboard.monitoredJurisdiction')}:</span>
-          </span>
-          {locations.map((loc) => {
+    <div className="space-y-4 pb-12">
+      {/* ============================================================ */}
+      {/* 1. TOP SECTION: ACCESSIBLE LOCATION SELECTOR & SEARCH BAR */}
+      {/* ============================================================ */}
+      <div className="bg-card-theme border-theme shadow-card-theme rounded-2xl p-4 sm:p-5 transition-colors">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-theme pb-3.5 mb-3.5">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-[#2563EB]/15 border border-[#2563EB]/30 flex items-center justify-center text-[#2563EB] shrink-0">
+              <Globe className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-sm sm:text-base font-bold text-main-theme flex items-center gap-2">
+                <span>{t('map.locationSelectHeading')}</span>
+                <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-[#2563EB]/10 text-[#2563EB] font-semibold border border-[#2563EB]/25">
+                  {getLocationDisplayName(selectedLocation, language)}
+                </span>
+              </h2>
+              <p className="text-xs text-muted-theme mt-0.5">
+                {selectedLocation.country} · {formatNumberLocale(selectedLocation.latitude, language, 4)}°N, {formatNumberLocale(selectedLocation.longitude, language, 4)}°E
+              </p>
+            </div>
+          </div>
+
+          {/* Quick Browse All Locations Button */}
+          {onOpenLocationModal && (
+            <button
+              onClick={onOpenLocationModal}
+              className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs transition-colors flex items-center justify-center gap-1.5 shrink-0 self-start md:self-auto"
+            >
+              <MapPin className="w-3.5 h-3.5" />
+              <span>{t('map.changeOrAddLocation')}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Search input & Filter category pills */}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2.5 mb-3">
+          <div className="relative flex-1 min-w-0">
+            <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-muted-theme" />
+            <input
+              type="text"
+              value={locationSearchQuery}
+              onChange={(e) => setLocationSearchQuery(e.target.value)}
+              placeholder={t('map.searchPlacesPlaceholder')}
+              className="w-full pl-8.5 pr-8 py-1.5 text-xs rounded-xl bg-subtle-theme border border-theme text-main-theme placeholder:text-muted-theme focus:outline-hidden focus:border-[#2563EB] focus:ring-1 focus:ring-[#2563EB]/30 transition-all"
+            />
+            {locationSearchQuery && (
+              <button
+                onClick={() => setLocationSearchQuery('')}
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-muted-theme hover:text-main-theme p-0.5"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+            <button
+              onClick={() => setLocationTypeFilter('all')}
+              className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap transition-colors font-medium ${
+                locationTypeFilter === 'all'
+                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  : 'bg-subtle-theme hover:bg-hover-theme text-secondary-theme border border-theme'
+              }`}
+            >
+              {t('map.allLocations')} ({locations.length})
+            </button>
+            <button
+              onClick={() => setLocationTypeFilter('city')}
+              className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap transition-colors font-medium ${
+                locationTypeFilter === 'city'
+                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  : 'bg-subtle-theme hover:bg-hover-theme text-secondary-theme border border-theme'
+              }`}
+            >
+              🏙️ {t('map.citiesFilter')} ({locations.filter((l) => l.locationType === 'city').length})
+            </button>
+            <button
+              onClick={() => setLocationTypeFilter('town')}
+              className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap transition-colors font-medium ${
+                locationTypeFilter === 'town'
+                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  : 'bg-subtle-theme hover:bg-hover-theme text-secondary-theme border border-theme'
+              }`}
+            >
+              🏘️ {t('map.townsFilter')} ({locations.filter((l) => l.locationType === 'town').length})
+            </button>
+            <button
+              onClick={() => setLocationTypeFilter('village')}
+              className={`px-2.5 py-1 text-xs rounded-lg whitespace-nowrap transition-colors font-medium ${
+                locationTypeFilter === 'village'
+                  ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
+                  : 'bg-subtle-theme hover:bg-hover-theme text-secondary-theme border border-theme'
+              }`}
+            >
+              🌾 {t('map.villagesFilter')} ({locations.filter((l) => l.locationType === 'village' || l.locationType === 'checkpoint').length})
+            </button>
+          </div>
+        </div>
+
+        {/* Fast Location Selector Chips */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+          {filteredLocationList.map((loc) => {
             const isCurrent = loc.id === selectedLocation.id;
             const locName = getLocationDisplayName(loc, language);
             return (
               <button
                 key={loc.id}
                 onClick={() => setSelectedLocationId(loc.id)}
-                className={`px-3 py-1.5 text-xs rounded-lg transition-colors whitespace-nowrap ${
+                className={`px-3 py-1.5 text-xs rounded-xl transition-all whitespace-nowrap shrink-0 flex items-center gap-1.5 ${
                   isCurrent
-                    ? 'bg-[#2563EB] text-white font-semibold shadow-xs border border-[#2563EB]'
-                    : 'bg-[#E8F2FF] hover:bg-[#d8e8fe] text-[#0F172A] border border-[#DCE5EF] font-medium'
+                    ? 'bg-[#2563EB] text-white font-bold shadow-xs border border-[#2563EB]'
+                    : 'bg-subtle-theme hover:bg-hover-theme text-main-theme border border-theme font-medium'
                 }`}
               >
-                {locName.split(' ')[0]} ({loc.country})
+                <MapPin className={`w-3 h-3 ${isCurrent ? 'text-white' : 'text-[#2563EB]'}`} />
+                <span>{locName.split(' ')[0]}</span>
+                <span className={`text-[10px] ${isCurrent ? 'text-blue-100' : 'text-muted-theme'}`}>
+                  ({loc.country})
+                </span>
               </button>
             );
           })}
         </div>
+      </div>
 
-        {/* Right: Map Style & Risk Filter Controls */}
+      {/* ============================================================ */}
+      {/* 2. MAP CONTROL BAR: TILE STYLES, RISK FILTERS & SCROLL MODE */}
+      {/* ============================================================ */}
+      <div className="bg-card-theme border-theme shadow-card-theme rounded-xl p-3 sm:p-4 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+        {/* Left: Tile Layer Providers */}
         <div className="flex flex-wrap items-center gap-2">
-          {/* Tile layer selector */}
-          <div className="flex items-center gap-1 bg-[#E8F2FF] p-0.5 rounded-lg border border-[#DCE5EF] text-xs">
+          <span className="text-xs font-semibold text-secondary-theme mr-1 flex items-center gap-1">
+            <Layers className="w-3.5 h-3.5 text-[#2563EB]" />
+            <span>{t('map.layerStreets')}:</span>
+          </span>
+          <div className="flex items-center gap-1 bg-subtle-theme p-0.5 rounded-lg border border-theme text-xs">
             <button
               onClick={() => setActiveTileProvider('osm')}
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeTileProvider === 'osm'
                   ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
-                  : 'text-[#0F172A] hover:bg-white/80 font-medium'
+                  : 'text-main-theme hover:bg-card-theme font-medium'
               }`}
             >
               {t('map.layerOsm')}
@@ -413,7 +591,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeTileProvider === 'streets'
                   ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
-                  : 'text-[#0F172A] hover:bg-white/80 font-medium'
+                  : 'text-main-theme hover:bg-card-theme font-medium'
               }`}
             >
               {t('map.layerStreets')}
@@ -423,7 +601,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeTileProvider === 'satellite'
                   ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
-                  : 'text-[#0F172A] hover:bg-white/80 font-medium'
+                  : 'text-main-theme hover:bg-card-theme font-medium'
               }`}
             >
               {t('map.layerSatellite')}
@@ -433,21 +611,38 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeTileProvider === 'dark'
                   ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
-                  : 'text-[#0F172A] hover:bg-white/80 font-medium'
+                  : 'text-main-theme hover:bg-card-theme font-medium'
               }`}
             >
               {t('map.layerDark')}
             </button>
           </div>
+        </div>
+
+        {/* Right: Risk Filters & Wheel Zoom Mode Toggle */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Wheel Zoom Toggle (Prevents Scroll Trapping) */}
+          <button
+            onClick={() => setIsWheelZoomEnabled(!isWheelZoomEnabled)}
+            className={`px-2.5 py-1 text-xs rounded-lg border font-medium flex items-center gap-1.5 transition-all shadow-xs ${
+              isWheelZoomEnabled
+                ? 'bg-amber-500 text-white border-amber-600 font-semibold'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700/60'
+            }`}
+            title={t('map.wheelScrollHint')}
+          >
+            <MousePointer className="w-3.5 h-3.5" />
+            <span>{isWheelZoomEnabled ? t('map.wheelZoomActive') : t('map.wheelZoomDisable')}</span>
+          </button>
 
           {/* Risk Level Filters */}
-          <div className="flex items-center gap-1 bg-[#E8F2FF] p-0.5 rounded-lg border border-[#DCE5EF] text-xs">
+          <div className="flex items-center gap-1 bg-subtle-theme p-0.5 rounded-lg border border-theme text-xs overflow-x-auto no-scrollbar">
             <button
               onClick={() => setActiveRiskFilter('all')}
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeRiskFilter === 'all'
                   ? 'bg-[#2563EB] text-white font-semibold shadow-xs'
-                  : 'text-[#0F172A] hover:bg-white/80 font-medium'
+                  : 'text-main-theme hover:bg-card-theme font-medium'
               }`}
             >
               {t('common.all')} ({dutyPoints.length})
@@ -457,7 +652,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeRiskFilter === 'extreme'
                   ? 'bg-[#DC2626] text-white font-semibold shadow-xs'
-                  : 'text-[#DC2626] hover:bg-white/80 font-medium'
+                  : 'text-[#DC2626] hover:bg-card-theme font-medium'
               }`}
             >
               {t('risk.extreme')}
@@ -467,7 +662,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeRiskFilter === 'high'
                   ? 'bg-[#F97316] text-white font-semibold shadow-xs'
-                  : 'text-[#F97316] hover:bg-white/80 font-medium'
+                  : 'text-[#F97316] hover:bg-card-theme font-medium'
               }`}
             >
               {t('risk.high')}
@@ -477,7 +672,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeRiskFilter === 'moderate'
                   ? 'bg-[#F59E0B] text-white font-semibold shadow-xs'
-                  : 'text-[#b45309] hover:bg-white/80 font-medium'
+                  : 'text-[#b45309] hover:bg-card-theme font-medium'
               }`}
             >
               {t('risk.moderate')}
@@ -487,7 +682,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               className={`px-2.5 py-1 rounded-md transition-colors ${
                 activeRiskFilter === 'low'
                   ? 'bg-[#16A34A] text-white font-semibold shadow-xs'
-                  : 'text-[#16A34A] hover:bg-white/80 font-medium'
+                  : 'text-[#16A34A] hover:bg-card-theme font-medium'
               }`}
             >
               {t('risk.low')}
@@ -496,17 +691,25 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
         </div>
       </div>
 
-      {/* Map Viewport Container */}
-      <div className="relative w-full h-[600px] min-h-[600px] bg-white rounded-xl border border-[#DCE5EF] overflow-hidden shadow-card-theme">
+      {/* ============================================================ */}
+      {/* 3. RESPONSIVE MAP CONTAINER WITH SMOOTH SCROLL ISOLATION */}
+      {/* ============================================================ */}
+      <div className="relative isolate z-0 w-full h-[420px] sm:h-[480px] lg:h-[530px] bg-white rounded-2xl border border-theme overflow-hidden shadow-card-theme">
         <div
           ref={mapContainerRef}
-          style={{ height: '600px', width: '100%', minHeight: '600px' }}
+          style={{ height: '100%', width: '100%' }}
           className="w-full h-full"
         />
 
+        {/* Scroll Safety Hint Overlay Pill */}
+        <div className="absolute top-3 right-3 z-20 pointer-events-none hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-slate-900/80 backdrop-blur-md text-white text-[10px] font-medium shadow-md border border-white/10">
+          <MousePointer className="w-3 h-3 text-[#14B8A6]" />
+          <span>{isWheelZoomEnabled ? t('map.wheelZoomActive') : t('map.wheelScrollHint')}</span>
+        </div>
+
         {/* Tile Loading Indicator */}
         {isTileLoading && (
-          <div className="absolute top-4 right-4 z-20 bg-white/95 backdrop-blur-md px-3 py-1.5 rounded-lg border border-[#DCE5EF] flex items-center gap-2 text-xs text-[#2563EB] shadow-md animate-in fade-in">
+          <div className="absolute top-12 right-3 z-20 bg-card-theme/95 backdrop-blur-md px-3 py-1.5 rounded-lg border border-theme flex items-center gap-2 text-xs text-[#2563EB] shadow-md animate-in fade-in">
             <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#2563EB]" />
             <span className="font-medium">{t('map.loadingMapTiles')}</span>
           </div>
@@ -514,7 +717,7 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
 
         {/* Tile Error Message Banner */}
         {tileError && (
-          <div className="absolute top-4 right-4 z-20 bg-red-50/95 backdrop-blur-md px-3.5 py-2 rounded-lg border border-red-200 flex items-center gap-2 text-xs text-[#DC2626] max-w-sm animate-in fade-in shadow-md">
+          <div className="absolute top-12 right-3 z-20 bg-red-50/95 backdrop-blur-md px-3.5 py-2 rounded-lg border border-red-200 flex items-center gap-2 text-xs text-[#DC2626] max-w-sm animate-in fade-in shadow-md">
             <AlertTriangle className="w-4 h-4 text-[#DC2626] shrink-0" />
             <span className="flex-1 text-[11px] font-medium">{tileError}</span>
             <button
@@ -532,16 +735,16 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
           </div>
         )}
 
-        {/* Floating Instructions Banner */}
-        <div className="absolute top-4 left-4 z-20 bg-white/95 border border-[#DCE5EF] rounded-xl p-3 text-xs text-[#0F172A] backdrop-blur-md max-w-xs shadow-modal-theme">
-          <div className="flex items-center justify-between mb-1">
-            <div className="font-bold text-[#0F172A] flex items-center gap-1.5">
+        {/* Floating Instructions Banner (Top-Left) */}
+        <div className="absolute top-3 left-3 z-20 bg-card-theme/95 border-theme rounded-xl p-3 text-xs text-main-theme backdrop-blur-md max-w-xs shadow-modal-theme">
+          <div className="flex items-center justify-between mb-1 gap-2">
+            <div className="font-bold text-main-theme flex items-center gap-1.5">
               <Compass className="w-4 h-4 text-[#2563EB]" />
               <span>{t('map.title')}</span>
             </div>
             <button
               onClick={() => setIsInfoCardCollapsed(!isInfoCardCollapsed)}
-              className="p-0.5 text-[#64748B] hover:text-[#0F172A] rounded transition-colors"
+              className="p-0.5 text-muted-theme hover:text-main-theme rounded transition-colors"
               title={isInfoCardCollapsed ? t('map.showInfo') : t('map.hideInfo')}
             >
               {isInfoCardCollapsed ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
@@ -550,11 +753,11 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
 
           {!isInfoCardCollapsed && (
             <>
-              <p className="text-[11px] text-[#64748B] leading-relaxed">
+              <p className="text-[11px] text-muted-theme leading-relaxed">
                 {t('map.clickToPin')}
               </p>
               {clickCoords && (
-                <div className="mt-2.5 pt-2 border-t border-[#DCE5EF] text-[11px]">
+                <div className="mt-2.5 pt-2 border-t border-theme text-[11px]">
                   <div className="font-mono text-[#2563EB] font-semibold">
                     {t('map.pinPrompt')}: {formatNumberLocale(clickCoords.lat, language, 4)}°N, {formatNumberLocale(clickCoords.lon, language, 4)}°E
                   </div>
@@ -571,15 +774,15 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
           )}
         </div>
 
-        {/* Selected Junction Inspector Sidebar Drawer */}
+        {/* Selected Junction Floating Drawer (Bottom-Right) */}
         {selectedPoint && (
-          <div className="absolute bottom-4 right-4 z-20 bg-white/95 border border-[#DCE5EF] rounded-2xl p-4 text-xs text-[#0F172A] backdrop-blur-md max-w-sm shadow-modal-theme animate-in slide-in-from-bottom duration-200">
+          <div className="absolute bottom-3 right-3 z-20 bg-card-theme/95 border-theme rounded-2xl p-4 text-xs text-main-theme backdrop-blur-md max-w-sm shadow-modal-theme animate-in slide-in-from-bottom duration-200">
             <div className="flex items-start justify-between gap-3">
               <div>
-                <span className="text-[10px] font-mono uppercase text-[#64748B]">
+                <span className="text-[10px] font-mono uppercase text-muted-theme">
                   {selectedPoint.type} · {selectedPoint.verificationStatus === 'verified' ? t('common.verified') : t('common.unverified')}
                 </span>
-                <h4 className="text-sm font-bold text-[#0F172A] mt-0.5">
+                <h4 className="text-sm font-bold text-main-theme mt-0.5">
                   {getDutyPointDisplayName(selectedPoint, language)}
                 </h4>
                 <div className="text-[11px] font-mono text-[#2563EB] mt-0.5">
@@ -588,41 +791,41 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
               </div>
               <button
                 onClick={() => setSelectedPoint(null)}
-                className="text-[#64748B] hover:text-[#0F172A] p-1"
+                className="text-muted-theme hover:text-main-theme p-1"
               >
                 ✕
               </button>
             </div>
 
             <div className="mt-3 grid grid-cols-2 gap-2 text-center font-mono">
-              <div className="p-2 bg-[#F8FAFC] rounded-lg border border-[#DCE5EF]">
-                <div className="text-[10px] text-[#64748B]">{t('risk.score')}</div>
+              <div className="p-2 bg-subtle-theme rounded-lg border border-theme">
+                <div className="text-[10px] text-muted-theme">{t('risk.score')}</div>
                 <div className="text-sm font-bold text-[#DC2626]">
                   {riskAssessments[selectedPoint.id]?.score ?? 50}/100
                 </div>
               </div>
-              <div className="p-2 bg-[#F8FAFC] rounded-lg border border-[#DCE5EF]">
-                <div className="text-[10px] text-[#64748B]">{t('risk.wbgt')}</div>
+              <div className="p-2 bg-subtle-theme rounded-lg border border-theme">
+                <div className="text-[10px] text-muted-theme">{t('risk.wbgt')}</div>
                 <div className="text-sm font-bold text-[#F59E0B]">
                   {formatNumberLocale(riskAssessments[selectedPoint.id]?.estimatedWbgt ?? 31.0, language, 1)}°C
                 </div>
               </div>
             </div>
 
-            <div className="mt-3 text-[11px] text-[#334155] space-y-1">
+            <div className="mt-3 text-[11px] text-secondary-theme space-y-1">
               <div>
-                <span className="text-[#64748B]">{t('shade.shadeCondition')}:</span>{' '}
+                <span className="text-muted-theme">{t('shade.shadeCondition')}:</span>{' '}
                 <span className="font-medium">{getShadeConditionName(selectedPoint.shadeCondition, language)}</span>
               </div>
               <div>
-                <span className="text-[#64748B]">{t('calculator.trafficDensity')}:</span> {getTrafficDensityName(selectedPoint.trafficDensity, language)}
+                <span className="text-muted-theme">{t('calculator.trafficDensity')}:</span> {getTrafficDensityName(selectedPoint.trafficDensity, language)}
               </div>
             </div>
 
-            <div className="mt-3 pt-3 border-t border-[#DCE5EF] flex gap-2">
+            <div className="mt-3 pt-3 border-t border-theme flex gap-2">
               <button
                 onClick={() => onNavigateToTab('planner')}
-                className="flex-1 py-1.5 bg-[#E8F2FF] hover:bg-[#d8e8fe] border border-[#DCE5EF] text-[#0F172A] rounded-lg font-medium text-[11px] transition-colors shadow-xs"
+                className="flex-1 py-1.5 bg-subtle-theme hover:bg-hover-theme border border-theme text-main-theme rounded-lg font-medium text-[11px] transition-colors shadow-xs"
               >
                 {t('map.openInPlanner')}
               </button>
@@ -635,6 +838,243 @@ export const GlobalHeatMapView: React.FC<GlobalHeatMapViewProps> = ({
             </div>
           </div>
         )}
+      </div>
+
+      {/* ============================================================ */}
+      {/* 4. LOWER SECTION: CURRENT AREA THERMAL STATUS CARD */}
+      {/* ============================================================ */}
+      <div className="bg-card-theme border-theme shadow-card-theme rounded-2xl p-4 sm:p-6 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-theme pb-4 mb-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="text-base sm:text-lg font-bold text-main-theme">
+                {getLocationDisplayName(selectedLocation, language)}
+              </span>
+              <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-subtle-theme text-muted-theme border border-theme">
+                {getLocationTypeName(selectedLocation.locationType, language)}
+              </span>
+            </div>
+            <p className="text-xs text-muted-theme mt-0.5">
+              {[selectedLocation.city, selectedLocation.district, selectedLocation.state, selectedLocation.country].filter(Boolean).join(', ')} · {t('map.currentLocationOverview')}
+            </p>
+          </div>
+
+          {/* Quick change location button accessible below the map */}
+          {onOpenLocationModal && (
+            <button
+              onClick={onOpenLocationModal}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-subtle-theme hover:bg-hover-theme text-[#2563EB] border border-theme shadow-xs transition-colors flex items-center gap-1.5 self-start sm:self-auto"
+            >
+              <MapPin className="w-3.5 h-3.5 text-[#2563EB]" />
+              <span>{t('nav.changeLocation')}</span>
+            </button>
+          )}
+        </div>
+
+        {/* Microclimate & Thermal Stat Highlights */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <div className="p-3.5 rounded-xl bg-subtle-theme border border-theme">
+            <div className="flex items-center gap-1.5 text-xs text-muted-theme mb-1">
+              <Thermometer className="w-3.5 h-3.5 text-[#DC2626]" />
+              <span>{t('weather.airTemp')}</span>
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-main-theme">
+              {formatNumberLocale(currentLocationWeather.temperature, language, 1)}°C
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-subtle-theme border border-theme">
+            <div className="flex items-center gap-1.5 text-xs text-muted-theme mb-1">
+              <Umbrella className="w-3.5 h-3.5 text-[#2563EB]" />
+              <span>{t('weather.humidity')}</span>
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#2563EB]">
+              {formatNumberLocale(currentLocationWeather.relativeHumidity, language, 0)}% RH
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-subtle-theme border border-theme">
+            <div className="flex items-center gap-1.5 text-xs text-muted-theme mb-1">
+              <MapPin className="w-3.5 h-3.5 text-amber-500" />
+              <span>{t('dashboard.registeredDutyPoints')}</span>
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-main-theme">
+              {dutyPoints.length}
+            </div>
+          </div>
+
+          <div className="p-3.5 rounded-xl bg-subtle-theme border border-theme">
+            <div className="flex items-center gap-1.5 text-xs text-muted-theme mb-1">
+              <ShieldAlert className="w-3.5 h-3.5 text-[#DC2626]" />
+              <span>{t('dashboard.highExtremeHeat')}</span>
+            </div>
+            <div className="text-lg sm:text-xl font-bold font-mono text-[#DC2626]">
+              {highRiskCount}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 5. MONITORED TRAFFIC JUNCTIONS DIRECTORY (ACCESSIBLE BY SCROLL) */}
+      {/* ============================================================ */}
+      <div className="bg-card-theme border-theme shadow-card-theme rounded-2xl p-4 sm:p-6 transition-colors">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <div>
+            <h3 className="text-sm sm:text-base font-bold text-main-theme flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-[#2563EB]" />
+              <span>{t('map.junctionsBelowTitle')}</span>
+              <span className="text-xs font-normal text-muted-theme">({dutyPoints.length})</span>
+            </h3>
+            <p className="text-xs text-muted-theme mt-0.5">
+              {t('dashboard.directorySubtitle')}
+            </p>
+          </div>
+
+          {/* Quick tab jump */}
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => onNavigateToTab('planner')}
+              className="px-3 py-1.5 text-xs font-medium rounded-xl bg-subtle-theme hover:bg-hover-theme border border-theme text-main-theme transition-colors flex items-center gap-1.5"
+            >
+              <Calendar className="w-3.5 h-3.5 text-[#14B8A6]" />
+              <span>{t('nav.planner')}</span>
+            </button>
+            <button
+              onClick={() => onNavigateToTab('cooling')}
+              className="px-3 py-1.5 text-xs font-medium rounded-xl bg-subtle-theme hover:bg-hover-theme border border-theme text-main-theme transition-colors flex items-center gap-1.5"
+            >
+              <Umbrella className="w-3.5 h-3.5 text-[#2563EB]" />
+              <span>{t('cooling.title')}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Junction Card Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3.5">
+          {dutyPoints.map((dp) => {
+            const assessment = riskAssessments[dp.id];
+            const score = assessment?.score ?? 50;
+            const cat: RiskCategory = assessment?.category ?? 'Moderate';
+            const catName = getRiskCategoryName(cat, language);
+            const dpName = getDutyPointDisplayName(dp, language);
+            const w = weatherMap[dp.locationId] || currentLocationWeather;
+
+            let badgeClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            if (cat === 'Extreme') badgeClass = 'bg-red-50 text-[#DC2626] border-red-200';
+            else if (cat === 'High') badgeClass = 'bg-orange-50 text-[#F97316] border-orange-200';
+            else if (cat === 'Moderate') badgeClass = 'bg-amber-50 text-amber-700 border-amber-200';
+
+            return (
+              <div
+                key={dp.id}
+                className="p-4 rounded-xl border border-theme bg-subtle-theme hover:border-[#2563EB]/40 transition-all flex flex-col justify-between gap-3 shadow-xs"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-1.5">
+                    <span className="text-[10px] font-mono uppercase text-muted-theme">
+                      {dp.type} · {dp.verificationStatus === 'verified' ? t('common.verified') : t('common.unverified')}
+                    </span>
+                    <span className={`text-[10px] font-bold uppercase px-2 py-0.5 rounded-full border ${badgeClass}`}>
+                      {catName}
+                    </span>
+                  </div>
+
+                  <h4 className="text-sm font-bold text-main-theme leading-snug">
+                    {dpName}
+                  </h4>
+
+                  <div className="text-[11px] font-mono text-[#2563EB] mt-1">
+                    📍 {formatNumberLocale(dp.latitude, language, 4)}°N, {formatNumberLocale(dp.longitude, language, 4)}°E
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 mt-3 p-2.5 rounded-lg bg-card-theme border border-theme text-xs font-mono">
+                    <div>
+                      <div className="text-[10px] text-muted-theme">{t('risk.score')}</div>
+                      <div className="text-sm font-bold text-main-theme mt-0.5">{score} / 100</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[10px] text-muted-theme">{t('weather.airTemp')}</div>
+                      <div className="text-sm font-bold text-main-theme mt-0.5">
+                        {formatNumberLocale(w.temperature, language, 1)}°C
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="mt-2.5 text-[11px] text-muted-theme space-y-0.5">
+                    <div>
+                      <span>{t('shade.shadeCondition')}:</span>{' '}
+                      <span className="font-semibold text-secondary-theme">{getShadeConditionName(dp.shadeCondition, language)}</span>
+                    </div>
+                    <div>
+                      <span>{t('calculator.trafficDensity')}:</span>{' '}
+                      <span className="font-semibold text-secondary-theme">{getTrafficDensityName(dp.trafficDensity, language)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-2 border-t border-theme flex items-center gap-2">
+                  <button
+                    onClick={() => handleFocusDutyPoint(dp)}
+                    className="flex-1 py-1.5 px-2 bg-[#2563EB] hover:bg-[#1D4ED8] text-white text-xs font-semibold rounded-lg transition-colors flex items-center justify-center gap-1 shadow-xs"
+                    title={t('map.focusOnMap')}
+                  >
+                    <Navigation className="w-3 h-3" />
+                    <span>{t('map.focusOnMap')}</span>
+                  </button>
+
+                  <button
+                    onClick={() => onNavigateToTab('planner')}
+                    className="py-1.5 px-2.5 bg-card-theme hover:bg-hover-theme border border-theme text-secondary-theme text-xs font-medium rounded-lg transition-colors"
+                    title={t('map.openInPlanner')}
+                  >
+                    <Calendar className="w-3.5 h-3.5 text-[#14B8A6]" />
+                  </button>
+
+                  <button
+                    onClick={() => onNavigateToTab('calculator')}
+                    className="py-1.5 px-2.5 bg-card-theme hover:bg-hover-theme border border-theme text-secondary-theme text-xs font-medium rounded-lg transition-colors"
+                    title={t('map.openInCalculator')}
+                  >
+                    <Sliders className="w-3.5 h-3.5 text-[#2563EB]" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ============================================================ */}
+      {/* 6. BOTTOM NAVIGATION AND BACK-TO-TOP BUTTON */}
+      {/* ============================================================ */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+        <div className="flex items-center gap-2 text-xs text-muted-theme">
+          <Globe className="w-4 h-4 text-[#2563EB]" />
+          <span>
+            {t('dashboard.monitoredJurisdiction')}: <strong>{getLocationDisplayName(selectedLocation, language)}</strong>
+          </span>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {onOpenLocationModal && (
+            <button
+              onClick={onOpenLocationModal}
+              className="px-3 py-1.5 text-xs font-semibold rounded-xl bg-subtle-theme hover:bg-hover-theme text-[#2563EB] border border-theme transition-colors shadow-xs"
+            >
+              {t('nav.changeLocation')}
+            </button>
+          )}
+
+          <button
+            onClick={scrollToTop}
+            className="px-3.5 py-1.5 text-xs font-semibold rounded-xl bg-[#2563EB] hover:bg-[#1D4ED8] text-white shadow-xs transition-colors flex items-center gap-1.5"
+          >
+            <ArrowUp className="w-3.5 h-3.5" />
+            <span>{t('map.backToTop')}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

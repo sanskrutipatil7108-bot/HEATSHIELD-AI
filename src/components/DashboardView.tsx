@@ -88,7 +88,8 @@ const DashboardEmbeddedMap: React.FC<{
       center: [location.latitude, location.longitude],
       zoom: 13,
       zoomControl: true,
-      attributionControl: true
+      attributionControl: true,
+      scrollWheelZoom: false
     });
 
     const tiles = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}', {

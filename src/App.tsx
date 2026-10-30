@@ -76,6 +76,7 @@ function MainAppContent() {
         {activeTab === 'map' && (
           <GlobalHeatMapView
             onOpenAddPointWithCoords={handleOpenAddPointWithCoords}
+            onOpenLocationModal={() => setIsLocationModalOpen(true)}
             onNavigateToTab={(tab) => setActiveTab(tab)}
           />
         )}

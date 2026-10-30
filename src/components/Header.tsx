@@ -86,7 +86,7 @@ export const Header: React.FC<HeaderProps> = ({
   const currentLangObj = languageOptions.find((l) => l.id === language) || languageOptions[0];
 
   return (
-    <header className="w-full max-w-full border-b border-slate-700/70 bg-[#14213D] text-white sticky top-0 z-40 shadow-sm transition-colors duration-200">
+    <header className="w-full max-w-full border-b border-slate-700/70 bg-[#14213D] text-white sticky top-0 z-50 shadow-sm transition-colors duration-200">
       {/* Primary Navigation Bar */}
       <div className="w-full max-w-7xl mx-auto px-3 sm:px-4 lg:px-6">
         <div className="h-16 flex items-center justify-between gap-2 lg:gap-3 w-full min-w-0">
@@ -162,10 +162,10 @@ export const Header: React.FC<HeaderProps> = ({
               {isLangMenuOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-40"
+                    className="fixed inset-0 z-[55]"
                     onClick={() => setIsLangMenuOpen(false)}
                   />
-                  <div className="absolute right-0 mt-1.5 w-40 rounded-xl bg-[#0F172A] border border-slate-700 shadow-xl py-1 z-50 text-xs animate-in fade-in duration-150">
+                  <div className="absolute right-0 mt-1.5 w-40 rounded-xl bg-[#0F172A] border border-slate-700 shadow-xl py-1 z-[60] text-xs animate-in fade-in duration-150">
                     <div className="px-3 py-1 text-[10px] uppercase font-mono tracking-wider text-slate-400 border-b border-slate-800">
                       {t('common.language')}
                     </div>
@@ -214,10 +214,10 @@ export const Header: React.FC<HeaderProps> = ({
               {isThemeMenuOpen && (
                 <>
                   <div
-                    className="fixed inset-0 z-40"
+                    className="fixed inset-0 z-[55]"
                     onClick={() => setIsThemeMenuOpen(false)}
                   />
-                  <div className="absolute right-0 mt-1.5 w-36 rounded-xl bg-[#0F172A] border border-slate-700 shadow-xl py-1 z-50 text-xs animate-in fade-in duration-150">
+                  <div className="absolute right-0 mt-1.5 w-36 rounded-xl bg-[#0F172A] border border-slate-700 shadow-xl py-1 z-[60] text-xs animate-in fade-in duration-150">
                     <div className="px-3 py-1 text-[10px] uppercase font-mono tracking-wider text-slate-400 border-b border-slate-800">
                       {theme === 'light' ? 'Day Mode' : 'Night Mode'}
                     </div>

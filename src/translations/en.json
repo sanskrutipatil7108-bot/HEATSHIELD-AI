@@ -201,7 +201,22 @@
     "trafficHeat": "Traffic Heat",
     "source": "Source",
     "simulated": "Simulated",
-    "liveNwp": "Live NWP"
+    "liveNwp": "Live NWP",
+    "wheelZoomEnable": "Enable Wheel Zoom",
+    "wheelZoomDisable": "Page Scroll Mode (Safe)",
+    "wheelZoomActive": "Wheel Zoom Active",
+    "wheelScrollHint": "Mouse wheel scrolls the page smoothly. Click to toggle wheel zoom or use +/- buttons.",
+    "locationSelectHeading": "Select Monitored Area / City / Village",
+    "searchPlacesPlaceholder": "Search city, village, town, district...",
+    "allLocations": "All Areas",
+    "citiesFilter": "Cities",
+    "townsFilter": "Towns",
+    "villagesFilter": "Villages & Blocks",
+    "changeOrAddLocation": "Browse All & Add Custom",
+    "currentLocationOverview": "Area Microclimate & Thermal Status",
+    "junctionsBelowTitle": "Traffic Junctions & Monitoring Posts in this Area",
+    "focusOnMap": "Focus on Map",
+    "backToTop": "Back to Top"
   },
   "calculator": {
     "title": "Scientific Thermal Risk & WBGT Assessment Engine",

@@ -201,7 +201,22 @@
     "trafficHeat": "ट्रैफिक गर्मी",
     "source": "स्रोत",
     "simulated": "अनुमानित",
-    "liveNwp": "लाइव एनडब्ल्यूपी"
+    "liveNwp": "लाइव एनडब्ल्यूपी",
+    "wheelZoomEnable": "नक्शा ज़ूम चालू करें",
+    "wheelZoomDisable": "पेज स्क्रोल मोड (सुरक्षित)",
+    "wheelZoomActive": "व्हील ज़ूम सक्रिय",
+    "wheelScrollHint": "माउस व्हील से पेज आसानी से स्क्रोल होता है। नक्शा ज़ूम करने के लिए बटन टॉगल करें या +/- बटन का प्रयोग करें।",
+    "locationSelectHeading": "निगरानी क्षेत्र / शहर / कस्बा / गाँव चुनें",
+    "searchPlacesPlaceholder": "शहर, गाँव, कस्बा, ज़िला खोजें...",
+    "allLocations": "सभी क्षेत्र",
+    "citiesFilter": "शहर",
+    "townsFilter": "कस्बे",
+    "villagesFilter": "गाँव व ग्रामीण ब्लॉक",
+    "changeOrAddLocation": "सभी स्थान देखें व नया जोड़ें",
+    "currentLocationOverview": "क्षेत्र का माइक्रो-क्लाइमेट एवं थर्मल स्थिति",
+    "junctionsBelowTitle": "इस क्षेत्र के ट्रैफिक जंक्शन एवं निगरानी चौकियां",
+    "focusOnMap": "नक्शे पर देखें",
+    "backToTop": "शीर्ष पर जाएं"
   },
   "calculator": {
     "title": "वैज्ञानिक थर्मल जोखिम एवं WBGT गणना मॉडल",
